@@ -1,0 +1,443 @@
+---
+title: "Relatório - Banco Mundial"
+author: "José Vinícius Santos de Melo"
+fontsize: 12pt
+geometry: "left=3cm,right=3cm,top=2cm,bottom=2cm"
+mainfont: Arial
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Limpando o workspace
+
+rm(list = ls())
+
+# Configurações Globais
+
+knitr::opts_chunk$set(echo = FALSE, warning  = F, fig.width = 12, fig.height = 7, message = F)
+options(digits=3, knitr.kable.NA = 'NA')
+
+# Definindo Diretório
+
+setwd('C:/Documentos/Trabalho de Macro/R')
+
+# Pacotes
+
+require(dplyr)
+require(WDI)
+require(ggplot2)
+require(rworldmap)
+require(RColorBrewer)
+
+## Alterando Tema do GGPLOT2 (Personalização dos Gráficos)
+
+theme_update(# axis labels
+             axis.title = element_text(size = 20), # Tamanho da fonte dos Eixos
+             # tick labels
+             axis.text = element_text(size = 20),  # Tamanho da fonte dos textos dos labs
+             # title 
+             title = element_text(size = 20))      # Tamanho da fonte do Título
+
+# Definindo os países que irei trabalhar
+
+continente <- c('BR','VE','AR','BO','CL','CO','EC','GY','PY','PE','SR','UY')
+pais <- 'BR'
+
+# Baixando os dados do Banco Mundial
+
+# Através da função WDI consigo abaixar diretamente dados do World Development Indicators do Banco Mundial
+
+data <- data.frame(WDI(country = continente, indicator = c('NY.GDP.PCAP.KD.ZG','NY.GDP.PCAP.KD','NY.GDS.TOTL.ZS','UIS.EA.6.AG25T99','SP.POP.GROW','NE.GDI.TOTL.ZS'),
+                       start = 1975,
+                       end = 2009,
+                       extra = T))
+
+# Data Clean
+
+namecols <- c('Simbolos',
+              'Pais',
+              'Ano',
+              'Crescimento do PIB (Anual %)',
+              'GDP per Capita',
+              'Poupança (% GDP)',
+              'Capital Humano (% Pop.)',
+              'Crescimento Pop. (%)',
+              'Formação de Capital Bruta (% GDP)',
+              'SIMB',
+              'Regiao',
+              'capital',
+              'longitude',
+              'latitude',
+              'renda',
+              'Emprestimo')
+
+colnames(data) <- namecols
+
+# Separando os dados para o Brasil x América do Sul
+
+br <- data %>% filter(data$Simbolos == pais) %>% arrange(Ano)
+southamerica <- aggregate(data = data, `Crescimento do PIB (Anual %)` ~ Ano, FUN = mean) %>% arrange(Ano)
+```
+
+# Introdução
+
+Este trabalho será realizado para análisar diferenças nas rendas per capitas entre os países e identificar padrões que diferenciam as taxas de crescimento destes países. Deste modo, serão utilizados os dados do *World Development Indicators* fornecidos pelo Banco Mundial. Este trabalho é destinado a cadeira de Macroeconomia II na Universidade Federal de Pernambuco, deste modo também se buscará analisar se existem correlações entre variáveis macroeconômicas e o nível de crescimento das economias principalmente analisar o modelo de crescimento econômico desenvolvido pelo economista norte-americano Robert Solow, além de correlacionar alguns fenomenos há modelos de crescimento endógenos que foram abordados em classe.
+
+# Distribuição de Renda no Mundo
+
+Podemos observar pelo gráfico abaixo duas coisas, havia uma certa concentração de renda, principalmente na América do Norte e na Europa. Somente alguns locais se sobressaiam em regiões como a Arábia Saudita, por causa das reservas petroliferas que lhe proporcionavam enorme poder de mercado e renda.
+Devemos ressaltar também que os dados para algumas regiões, principalmente da África e da antiga União Soviética não estão disponíveis para o ano de 1975, por causa dos processos de separação e independência que ocorreram nessas regiões. Também devemos dar algum destaque ao Japão na Ásia que se destaca por um nível de renda per capita bastante elevado para os padrões da região. Outro local que merece relevância é a Oceania e os países Nórdicos que sempre se mantem entre as regiões com os melhores indíceis sociais, contudo também com padrões de renda bastante elevados.
+
+```{r Dist. Renda 1975, results = 'hide'}
+
+# Dados para a formação do Mapa Mundi
+
+datamap <- WDI(indicator = 'NY.GDP.PCAP.KD', start = 1975, end = 1975) # Pegando os dados do WDI para 1975
+
+# Aglomerando os dados para o formato espacial
+
+sPDF <- joinCountryData2Map(datamap,
+                            joinCode = 'ISO2',
+                            nameJoinColumn = 'iso2c',
+                            mapResolution = 'coarse')
+
+# Parametro para definir o intervalo de renda que será mostrado no mapa #Aconselha-se a não alterar
+
+classInt <- classInt::classIntervals(sPDF[["NY.GDP.PCAP.KD"]], n=8, style="jenks")
+catMethod <- classInt[['brks']]
+
+# Pegando as cores do pacote RColorBrewer
+
+colourPalette <- RColorBrewer::brewer.pal(8, 'RdPu')
+
+# Criando o Mapa
+
+mapParams <- mapCountryData(sPDF,                    # Dados
+               nameColumnToPlot = 'NY.GDP.PCAP.KD',  # Variável que será utilizada
+               addLegend = F,                        # Retirar legenda
+               catMethod = catMethod,                # Definindo o método de separação do intervalo
+               colourPalette = colourPalette,        # Definindo as cores do intervalo
+               oceanCol = 'lightblue',               # Cor do Oceano
+               mapTitle = 'Renda Per Capita - 1975', # Título do Gráfico
+               missingCountryCol = 'darkgray',       # Definindo a cor para países que não possuem dados
+               borderCol = 'gray')                   # Definindo a cor das bordas
+
+# Chamando uma função para adicionar uma legenda externa
+
+do.call(addMapLegend,
+        c(mapParams,
+          legendLabels = 'all',
+          legendWidth = 0.5,       # Tamanho da Legenda (proporção)
+          legendInterval = 'data', # Inter. (data = singifica que irá utilizar a referencia dada no mapParams)
+          legendMar = 2))          # Definindo a altura da legenda
+
+# Plotando o gráfico
+
+mapParams   
+
+```
+
+Em 2009 temos noção de que a concentração de renda ainda se perpetua nas principais regiões como a América do Norte e a Europa mesmo com o maior nível de renda real, lembrando que estes valores são relativos aos níveis de preço de 2011, a desigualdade de renda ainda se perpetua no mundo.
+
+```{r Dist. Renda 2009, results='hide'}
+datamap <- WDI(indicator = 'NY.GDP.PCAP.KD', start = 2009, end = 2009)
+
+sPDF <- joinCountryData2Map(datamap,
+                            joinCode = 'ISO2',
+                            nameJoinColumn = 'iso2c',
+                            mapResolution = 'coarse')
+
+# Parametro
+
+classInt <- classInt::classIntervals(sPDF[["NY.GDP.PCAP.KD"]], n=8, style="jenks")
+catMethod <- classInt[['brks']]
+
+# Pegando as cores do pacote RColorBrewer
+
+colourPalette <- RColorBrewer::brewer.pal(8, 'RdPu')
+
+# Criando o Mapa
+
+mapParams <- mapCountryData(sPDF,
+               nameColumnToPlot = 'NY.GDP.PCAP.KD',
+               addLegend = F,
+               catMethod = catMethod,
+               colourPalette = colourPalette,
+               oceanCol = 'lightblue',
+               mapTitle = 'Renda Per Capita - 2009',
+               missingCountryCol = 'gray',
+               borderCol = 'gray')
+
+do.call(addMapLegend,
+        c(mapParams,
+          legendLabels = 'all',
+          legendWidth = 0.5,
+          legendInterval = 'data',
+          legendMar = 2))
+
+mapParams
+```
+
+# Países Pobres crescem mais?
+
+Uma das hipóteses colocadas neste trabalho é responder se países pobres crescem mais rapidamente do que países ricos? Será que isto é verdade? De acordo com algumas modelos como o de Solow, mesmo com diferenças em sua poupança os países tendem a convergir para as mesmas taxas de crescimento, será que isto é correto para o caso dos países da América do Sul? Para isto, pegamos a média das taxas de crescimento e do PIB per Capita dessas nações entre 1975 a 2009.
+
+Primeiramente, vamos analisar, graficamente, como as taxas de crescimento dos paises da America Latina e relacionadas com as do Brasil, para nível de comparação, se comportaram nos últimos anos. Podemos ver pelo gráfico abaixo que as taxas de crescimento de ambos tendem a serem semelhantes.
+
+```{r graph 1-2}
+
+# Mapa Latin America
+p1 <- ggplot(southamerica, aes(x = Ano)) +                # Definindo southamerica como os dados
+  geom_line(aes(y = `Crescimento do PIB (Anual %)`)) +    # Gráfico de Linha em que y = Cresc. PIB
+  xlab('Ano') +                                           # Definindo o nome para o eixo x
+  ylab('Tx. Cresc. PIB per Capita (%)') +
+  ggtitle('América do Sul - 1975-2009') +                 # Título do Gráfico
+  geom_hline(yintercept = 0, color = 'blue', linetype = 'dashed') + # Linha reta no 0
+  geom_hline(yintercept = mean(southamerica$`Crescimento do PIB (Anual %)`) + 1.96*sd(southamerica$`Crescimento do PIB (Anual %)`),
+             linetype = 'dashed',
+             color = 'red') +
+  geom_hline(yintercept = mean(southamerica$`Crescimento do PIB (Anual %)`) - 1.96*sd(southamerica$`Crescimento do PIB (Anual %)`),
+             linetype = 'dashed',
+             color = 'red') +
+  theme_bw()
+
+# Brazil
+
+p2 <- ggplot(br, aes(x = Ano)) +
+  geom_line(aes(y = `Crescimento do PIB (Anual %)`)) +
+  xlab('Ano') +
+  ylab('Tx. Cresc. PIB per Capita (%)') +
+  ggtitle('Brasil - 1975-2009') +
+  geom_hline(yintercept = 0, color = 'blue', linetype = 'dashed') +
+  geom_hline(yintercept = mean(br$`Crescimento do PIB (Anual %)`) + 1.96*sd(br$`Crescimento do PIB (Anual %)`),
+             linetype = 'dashed',
+             color = 'red') +
+  geom_hline(yintercept = mean(br$`Crescimento do PIB (Anual %)`) - 1.96*sd(br$`Crescimento do PIB (Anual %)`),
+             linetype = 'dashed',
+             color = 'red') +
+  theme_bw()
+
+gridExtra::grid.arrange(p1,p2, nrow = 1)
+
+
+```
+
+Uma das questões a serem respondidas nesse relatório é: Países pobres possuem taxas de crescimento maiores do que países ricos? Para isto, iremos estimar o seguinte modelo:
+
+$$Taxa \ de \ Crescimento = \beta_0 + \beta_1 * Nível \ de \ Renda$$
+```{r Aggregate, include = F}
+
+# Agregando (tirando a média das variáveis) por Ano
+
+## América do Sul
+
+aggregated <- aggregate(data = data, cbind(`Crescimento do PIB (Anual %)`,`Formação de Capital Bruta (% GDP)`, `GDP per Capita`, `Crescimento Pop. (%)`) ~ Ano , FUN = mean)
+
+## Brasil
+
+aggregatedBR <- aggregate(data = data %>% filter(Pais == 'Brazil'), cbind(`Crescimento do PIB (Anual %)`,`Formação de Capital Bruta (% GDP)`, `GDP per Capita`, `Crescimento Pop. (%)`) ~ Ano , FUN = mean)
+
+```
+
+Assim, nossa equação estimada foi: 
+
+```{r}
+
+# regressão do Cresc. PIB em relação a GDP per Capita
+
+gy.rgdp <- lm(data = aggregated , `Crescimento do PIB (Anual %)` ~ `GDP per Capita`)
+
+# Plotando um relatório
+
+pander::pander(coef(summary(gy.rgdp)))
+
+```
+
+Pegando as taxas média de crescimento da América do Sul, além do GDP médio e fazendo uma regressão chegamos a um resultado contraditório do que estipulado no modelo de Solow, pois países ricos tendem a ter maiores taxas de crescimento do que os pobres. Todavia, essa hipótese em Solow se dá para países semelhantes em características socioeconômicas como, por exemplo, com mesmas taxas de depreciação e crescimento populacional. Contudo, observemos que o efeito do GDP sobre as taxas de crescimento são significativas para 94% dos casos. Isto nos dá confiança em assumir que realmente países ricos tendem a ter maiores taxas de crescimento, consequentemente devem haver outras características, além do nível de renda, que influenciam a variação da renda ao longo do tempo.
+
+Se organizarmos melhor estes dados, podemos chegar ao resultado da *Table 2*, em que está representada o nível médio de renda e a taxa de crescimento média dos países da América do Sul.
+
+```{r Tabela 1}
+
+# Agregando para um número menor de variáveis
+
+aggrSA <- aggregate(data = data, cbind(`Crescimento do PIB (Anual %)`, `GDP per Capita`) ~ Pais, FUN = mean) %>%
+  arrange(desc(`Crescimento do PIB (Anual %)`))
+
+# Transformando esses dados agregados em uma tabela
+
+knitr::kable(aggrSA, caption = 'Informações')
+```
+
+Se montarmos uma tabela representando as médias das taxas de crescimento e renda dos cinco países que mais crescem em relação aos cinco que menos crescem (excluindo a Venezuela), chegamos a seguinte tabela:
+
+```{r Tabela 2}
+
+# Filtrando os dados para os países ricos e pobres
+## OBS: dependendo dos seus dados, as posições dos cinco últimos podem mudar.
+
+fiverichestgdp <- mean(aggrSA$`Crescimento do PIB (Anual %)`[1:5])    # GDP Growth 5 mais ricos
+fiverichestgdpg <- mean(aggrSA$`GDP per Capita`[1:5])                 # GDP 5 mais ricos
+
+fivepoorestgdp <- mean(aggrSA$`Crescimento do PIB (Anual %)`[7:11])   # GDP Growth 5 mais pobres 
+fivepoorestgdpg <- mean(aggrSA$`GDP per Capita`[7:11])                # GDP 5 mais pobres
+
+
+# Construindo um Dataframe com os dados dos 5 países mais ricos e mais pobres
+
+rankcountry <- cbind(rbind(fivepoorestgdp, fivepoorestgdpg),
+                       rbind(fiverichestgdp, fiverichestgdpg))
+
+# Parametros para personificação da tabela
+
+rownames(rankcountry) <- c('Growth','GDP Per capita')
+colnames(rankcountry) <- c('Menores','Maiores')
+
+# Mostrando os dados dos países mais ricos e mais pobres em tabela
+
+knitr::kable(rankcountry, caption = 'Comparação entre GDP')
+```
+
+Isto nos retifica que, em média, os países que possuemm maiores taxas de crescimento média, nas últimas décadas, tendem a ser mais ricos. Isto somente nos leva a questionar ainda mais se somente o nível de renda é capaz de explicar a diferença entre as taxas de crescimento entre os países ricos e pobres.
+
+# Poupança
+
+As taxas de poupança de uma economia são importantes em diversos modelos de crescimento, nos gráficos a seguir vemos como evoluiu a proporção da renda nacional que era destinada a poupança para os países da América do Sul e o Brasil, respectivamente:
+
+```{r graph 3-4}
+
+# Agregando os níveis de Poupança por Ano para a América do Sul
+
+savingsSA <- aggregate(data = data, `Poupança (% GDP)` ~ Ano, FUN = mean) %>% arrange(Ano)
+
+
+p3 <- ggplot(savingsSA, aes(x = Ano)) +
+  geom_line(aes(y = `Poupança (% GDP)`)) +
+  xlab('Ano') +
+  ylab('Poupança (% GDP)') +
+  ggtitle('América do Sul, 1975-2009') +
+  geom_hline(yintercept = mean(savingsSA$`Poupança (% GDP)`), color = 'blue', linetype = 'dashed') +
+  theme_bw()
+
+p4 <- ggplot(br, aes(x = Ano)) +
+  geom_line(aes(y = `Poupança (% GDP)`)) +
+  xlab('Ano') +
+  ylab('Poupança (% GDP)') +
+  ggtitle('Brasil, 1975-2009') +
+  geom_hline(yintercept = mean(br$`Poupança (% GDP)`), color = 'blue', linetype = 'dashed') +
+  theme_bw()
+
+# Juntando os gráficos (2 em 1)
+
+gridExtra::grid.arrange(p3,p4, nrow = 1)
+
+```
+
+Podemos observar que o Brasil possuí taxas de poupança históricas próxima da média dos seus Vizinhos na América do Sul, contudo, observando de modo mais segregados os dados, observermos na tabela abaixo o quanto cada país poupa da fração de sua renda.
+
+```{r Tabela 3}
+
+# Agregando diversas variáveis por ano, no intuito de mostrar uma tabela
+
+savings <- aggregate(data = data, cbind(`Poupança (% GDP)`,`Crescimento do PIB (Anual %)`, `GDP per Capita`, `Crescimento Pop. (%)`,`Capital Humano (% Pop.)`) ~ Pais, FUN = mean) %>%
+  arrange(desc(`Poupança (% GDP)`))
+
+# Denominando o nome das colunas
+
+colnam <- c('País','Poup. (%)','GDP Growth','GDP p.c.', 'Cresc. Pop. (%)','Cap. Hum. (% Pop.)')
+
+# Mostrando a tabela com as informações dos dados acima
+
+knitr::kable(savings, caption = 'Estatísticas - Média Histórica', col.names = colnam)
+```
+
+Como podemos observar, o país com a menor taxa de poupança é a `r savings$Pais[12]`, enquanto o com maior é a `r savings$Pais[1]`. Em relação a `r savings$Pais[1]`, mesmo possuindo uma das menores taxas média de crescimento per capita, é o país que destina uma maior fração de sua renda para a poupança nacional. Este fato enriquece a hipótese da Convergência nos modelos de Solow, em que mesmo com taxas de investimento diferentes, esta não influencia na taxa de crescimento no longo-prazo, contudo outros aspectos macroeconômicos eram mais importantes para explicar as taxas de crescimento no estado estacionário.
+Todavia, devemos salientar, na visão do redator deste relatório, que observar a correlação entre as taxas de crescimento e o nível de poupança com estes dados é errôneo, dentro do modelo desenvolvido por Robert Solow. Pois, uma das hipóteses feita foi que a economia era fechada, de modo que a poupança se igualaria ao investimento. Todavia, podemos observar que estamos tratando dados dentro de economias abertas, de modo que o capital possui uma certa mobilidade. Isto significa que parte da poupança nacional pode está sendo financiando outros países.
+
+# Relação entre Nível de Renda e Poupança
+
+O gráfico nos mostra que, no geral, os países ricos tendem a terem maiores taxas de poupança, essa correlação pode ser explicada por causa do efeito que os novos investimentos possuem sobre a capacidade produtiva na economia, pois isto significa que terá mais recursos financeiros disponíveis para as empresas investirem em formação de capital e produtividade, por outro lado a maior oferta de recursos por parte do sistema bancário viabiliza a aplicação de taxas de juros, na média, menores do que em outros países, isto faz com que a tomada de crédito, tanto para produção quanto para inovação, torne-se mais barato para as empresas, isto pode afetar positivamente as taxas de crescimento da produtividade nestes países que, de acordo com alguns modelos de crescimento, é um dos principais componentes para determinar as taxas de crescimento e nível de renda no longo-prazo.
+
+```{r graph 5}
+p5 <- ggplot(data = data %>% filter(Ano == 2009), aes(x = `Poupança (% GDP)`, y = `GDP per Capita`)) +
+        geom_point(shape = 1, color = 'red') +
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        xlab('Poupança (% GDP)') +
+        ylab('GDP per Capita') +
+        ggtitle('América do Sul - 2009')
+
+p5
+```
+
+# Relação entre Nível de Renda e Capital Humano
+
+Para analisar esta relação foi utilizado um índice que mede a proporção de pessoas que possuem graduação completa. Contudo, devemos ressaltar aqui que para o ano de 2009 alguns países da América do Sul não possuem dados disponíveis, são estes: *Guiana Francesa*, *Argentina* e *Suriname*. De modo que o gráfico de dispersão fica da seguinte maneira:
+
+```{r graph 6}
+p6 <- ggplot(data = data %>% filter(Ano == 2009),
+             aes(x = `Capital Humano (% Pop.)`, y = `GDP per Capita`)) +
+        geom_point(shape = 1, color = 'red')+
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        xlab('Capital Humano (% Pop.)') +
+        ylab('GDP per Capita') +
+        ggtitle('América do Sul - 2009 - Capital Humano')
+
+p6
+```
+
+Os dados mostram uma relação positiva entre a proporção da mão-de-obra local que possuí graduação e o nível de renda, algo ressaltado no modelo de Solow com capital humano.
+
+# Relações empiricas de Solow
+
+## Investimentos
+
+Veremos a relação da proporção dos investimentos em relação ao GDP, e as taxas de crescimento. Se queremos nos basear no modelo de Solow, então temos que separar nossas análises em duas linhas do tempo: longo e curto prazo. Primeiramente, analisaremos as características de longo-prazo, demonstradas em Solow como o estado estacionário. As taxa de crescimento do produto é $\frac{\dot y}{y} = \alpha \frac{\dot k}{k}$, seja $k$ sendo o capital per capita efetivo, ou não, consequentemente variações em $\frac{\dot y}{y}$ seriam decorrentes de variações na taxa de crescimento do capital per caita. Como, para o modelo de Solow, no longo-prazo, $\frac{\dot k}{k} = 0$, consequentemente a taxa de crescimento convergeria para o nível de depreciação do capital, de modo a manter o capital constante. Isto significa que, no estado estacionário, as taxas de crescimento seriam nulas. Neste caso específico os níveis de investimento não influenciariam nas taxas de crescimento no longo-prazo.
+Todavia, quando observamos mais atentamente o curto-prazo, quando $\frac{\dot k}{k} \ne 0$, notamos que as taxas de crescimento do capital são determinadas pela seguinte equação: $\frac{\dot k}{k} = \gamma y - (\delta + n + g)k$. Ou seja, as taxas de investimento influenciam, para um dado $k$, as taxas de crescimento do capital e, assim sendo, as taxas de crescimento da renda.
+Como podemos observar no gráfico abaixo, existe uma relação positiva entre os níveis de investimento e as taxas de crescimento do GDP entre 1975 a 2009. Uma das explicações para este fato é que, provavelmente, os países da América do Sul ainda não chegaram aos seus respectivos níveis estacionários, de modo que as taxas de poupança ainda possuem influencia significativa sobre as taxas de crescimento. Outra hipótese que pode ser retirada de modelos de crescimento endogéno é que países com maiores níveis de investimento tendem a ter, também, uma maior proporção de investimentos dedicados as áreas de Desenvolvimento e Pesquisa resultando. deste modo, em maiores taxas de crescimento da produtividade. A lógica deste modelo é que, no estado estacionário, o crescimento da renda advém de aumento no nível de produtividade, de modo que as taxas de crescimento não tendem a zero, mas convergem entre os países.
+
+```{r graph 7-8}
+
+p7 <- ggplot(data = aggregated,
+             aes(y = `Crescimento do PIB (Anual %)`, x = `Formação de Capital Bruta (% GDP)`)) +
+        geom_point(shape = 1, color = 'red') +
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        ggtitle('América do Sul - 1975-2009')
+
+p8 <- ggplot(data = aggregatedBR,
+             aes(y = `Crescimento do PIB (Anual %)`, x = `Formação de Capital Bruta (% GDP)`)) +
+        geom_point(shape = 1, color = 'red') +
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        ggtitle('Brasil - 1975-2009')
+
+# Plotando os gráficos juntos
+gridExtra::grid.arrange(p7,p8, nrow = 1)
+```
+
+## Crescimento Populacional
+
+Por outro lado, pela equação descrita anteriormente, podemos observar que maiores níveis de crescimento populacional tendem a deteriorar a taxa de crescimento do capital per capita e, consequentemente, do produto. Isto acontece, pois para um maior número de pessoas o crescimento do capital determinado pela equação: $\dot K = sY - (d + n)K$ é menos significativo, para cada nível de K. Isto acontece, pois para Solow o nível de crescimento populacional acompanha o ritmo do crescimento na mão-de-obra, de modo que maiores quantidades de trabalhadores, para um mesmo nível de $K$, resultaria numa queda no capital per capita.
+Como podemos observar nos gráficos abaixo, realmente existe uma relação negativa entre estas variáveis retificando as hipóteses do Modelo de Solow.
+
+```{r graph 9-10}
+p9 <- ggplot(data = aggregated,
+             aes(y = `Crescimento do PIB (Anual %)`, x = `Crescimento Pop. (%)`)) +
+        geom_point(shape = 1, color = 'red') +
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        ggtitle('América do Sul - 1975-2009')
+
+p10 <- ggplot(data = aggregatedBR,
+             aes(y = `Crescimento do PIB (Anual %)`, x = `Crescimento Pop. (%)`)) +
+        geom_point(shape = 1, color = 'red') +
+        geom_smooth(method = 'lm', linetype = 'dashed') +
+        theme_bw() +
+        ggtitle('Brasil - 1975-2009')
+
+gridExtra::grid.arrange(p9,p10, nrow = 1)
+
+```
+
